@@ -242,7 +242,7 @@ void runBenchmark()
     normalize_matrix = false;
     int number_of_repeated_experiments_for_timing = 2;
 
-    for (int test_number = 1; test_number <= 10; test_number++) {
+    for (int test_number = 1; test_number <= 1; test_number++) {
 
         if (test_number == 1) {
             title = "random timing test";
@@ -254,7 +254,14 @@ void runBenchmark()
             test_perturbation = false, integer_range = 3, perturbation_count = 4, float_perturbation = (float)256 * std::numeric_limits<float>::epsilon(), double_perturbation = (double)256 * std::numeric_limits<double>::epsilon(); // perturbed integer test
             test_perturbation_from_identity = false, perturbation_from_identity_count = 1024 * 1024, float_perturbation_identity = 1e-3, double_perturbation_identity = 1e-3; // perturbed itentity test
         }
-        if (test_number == 2) {
+		
+		 //if (test_number == 2) {
+		//	 title = "SVD 2*2";
+			 
+			
+			
+		 //}
+        /*if (test_number == 2) {
             title = "integer timing test";
             number_of_repeated_experiments = number_of_repeated_experiments_for_timing;
             accuracy_test = false;
@@ -344,7 +351,7 @@ void runBenchmark()
             integer_range = 2; // this variable is used by both integer test and perturbed integer test
             test_perturbation = false, perturbation_count = 4, float_perturbation = (float)256 * std::numeric_limits<float>::epsilon(), double_perturbation = (double)256 * std::numeric_limits<double>::epsilon(); // perturbed integer test
             test_perturbation_from_identity = true, perturbation_from_identity_count = 1024 * 1024, float_perturbation_identity = (float)256 * std::numeric_limits<float>::epsilon(), double_perturbation_identity = (double)256 * std::numeric_limits<double>::epsilon(); // perturbed itentity test
-        }
+        }*/
 
         std::cout << " \n========== RUNNING BENCHMARK TEST == " << title << "=======" << std::endl;
         std::cout << " run_qr " << run_qr << std::endl;
@@ -427,9 +434,15 @@ void Algorithm_2_Test(){
 
 }
 
+void SVD2_2(){
+	std::cout << "this is a test" << std::endl;
+	
+}
+
 int main()
 {
   Algorithm_2_Test();
-    bool run_benchmark = true;
-    if (run_benchmark) runBenchmark();
+  SVD2_2();
+  bool run_benchmark = true;
+    //if (run_benchmark) runBenchmark();
 }
