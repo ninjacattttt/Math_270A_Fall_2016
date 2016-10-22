@@ -426,23 +426,227 @@ void runBenchmark()
     }
 }
 
-void Algorithm_2_Test(){
-
-  Eigen::Matrix<float, 2, 2> F,C;
-  F<<1,2,3,4;
-  C=F*F.transpose();
-
+template <class T>
+void Givens(T x, T y, T* c, T* s){
+	T d=x*x+y*y,t;
+	*c=1;
+	*s=0;
+	if(d!=0){
+		t=sqrt(d);
+		*c=x/t;
+		*s=-y/t;
+	}
 }
 
-void SVD2_2(){
-	std::cout << "this is a test" << std::endl;
+template <class T>
+void Jacobi(Eigen::Matrix<T,2,2> C, T* c, T* s){
+	T t,tau=(C(3)-C(0))/(2*C(1));
+	if(std::abs(tau)<10e5){
+		if(tau>0)
+			t=tau-sqrt(tau*tau+1);
+		if(tau<0)
+			t=tau+sqrt(1+tau*tau);
+	}
+	else if(tau>0)
+		t=1/(tau+sqrt(1+tau*tau));
+	else
+		t=1/(-tau+sqrt(1+tau*tau));
+
+	*c=1/sqrt(1+t*t);
+	*s=*c*t;
+}
+
+
+template <class T>
+void SVD2_2(Eigen::Matrix<T,2,2> FF){
+	Eigen::Matrix<T,2,2> C,V,Flip,Sign,U,Sigma,F;
+	Sign<<1,0,0,-1;
+	Flip<<0,1,1,0;
+	F=FF;
 	
+	C=F.transpose()*F;
+	
+	T c,s;
+							//do Jacobi rotation to get C=V*Sigma^2*V^t
+	Jacobi(C,&c,&s);
+
+	V << c,-s,s,c;
+	
+	C.applyOnTheLeft(V.adjoint());
+	C.applyOnTheRight(V);
+	
+	bool V_flip = false;
+	bool U_flip = false;
+	
+	T sigma1, sigma2;
+	if(C(0)>=C(3)){
+		sigma1=sqrt(C(0));
+		sigma2=sqrt(C(3));
+	}
+	else{
+		V_flip = true;
+		
+		V.applyOnTheRight(Flip);
+		
+		sigma1=sqrt(C(3));
+		sigma2=sqrt(C(0));
+	}
+	
+	C=F*V;								//A=FV
+
+	Givens(C(0),C(1),&c,&s);
+	U<< c,s,-s,c;
+	
+	T r = C(2)*s+C(3)*c;   				//r_22
+	
+	if(r<0){
+		U_flip=true;
+		U.applyOnTheRight(Sign);
+		sigma2=-sigma2;
+	}
+	
+	Sigma << sigma1, 0, 0, sigma2;
+	F=U*Sigma*V.transpose();
+	
+	T detF=F(0)*F(3)-F(1)*F(2);
+	
+	if(detF<0){
+		sigma2=-sigma2;
+		if(U_flip)
+			U.applyOnTheRight(Sign);
+		else{
+			V.applyOnTheRight(Sign);
+		}
+	}
+	else if(detF>0){
+		if(U_flip && V_flip){
+			U.applyOnTheRight(Sign);
+			V.applyOnTheRight(Sign);
+		}
+	}
+	else if(detF==0){
+		if(U_flip&& V_flip){
+			U.applyOnTheRight(Sign);
+			V.applyOnTheRight(Sign);
+		}
+		else if(U_flip){
+			U.applyOnTheRight(Sign);
+			sigma1=-sigma1;
+		}
+		else if(V_flip){
+			V.applyOnTheRight(Sign);
+			sigma1=-sigma1;
+		}
+	}
+	
+	std::cout << "computed sigma:\n" << sigma1 << "," << sigma2 << std::endl;
+	std::cout << "F:\n" << F << std::endl; 
+	std::cout << "U:\n" << U << std::endl; 
+	std::cout << "V:\n" << V << std::endl; 
+	std::cout << "check determinant:" << std::endl;
+	std::cout << "detU=" << U(0)*U(3)-U(1)*U(2) << std::endl;
+	std::cout << "detV=" << V(0)*V(3)-V(1)*V(2) << std::endl;
+	
+	Sigma << sigma1, 0, 0, sigma2;
+	F=FF-U*Sigma*V.transpose();
+
+	T error=sqrt(F(0)*F(0)+F(1)*F(1)+F(2)*F(2)+F(3)*F(3));    //error in Frobinus norm
+		
+	std::cout << "SVD error:\n" << error << std::endl;
 }
+
+template <class T>
+T findMax(T a, T b, T c){					//find max of three inputs
+	T max = a;
+	if(max<b)
+		max=b;
+	if(max<c)
+		max=c;
+	
+	return max;
+}
+
+template <class T>
+T FNorm(Eigen::Matrix<T,3,3> F){			//Frobinus norm of 3*3 matrix
+	int n=F.cols();
+	T norm=0;
+	for(int i=0;i<n;i++)
+		for(int j=0;j<n;j++)
+			norm+=F(i,j)*F(i,j);
+	norm=sqrt(norm);
+	
+	return norm;
+}
+
+template <class T>
+void Polar3_3(Eigen::Matrix<T,3,3> F){
+	Eigen::Matrix<T,3,3> R,S,G;
+	G.setZero();						
+	S=F;
+	R<<1,0,0,0,1,0,0,0,1;
+	
+	int it = 0, max_it = 100;
+	T c,s,m,n;
+	float tol = 0.001;
+	
+	while(it<max_it && findMax(std::abs(S(0,1)-S(1,0)),std::abs(S(0,2)-S(2,0)),std::abs(S(1,2)-S(2,1)))>tol){
+		for(int i=0;i<2;i++)
+			for(int j=i+1;j<3;j++){
+				m=S(i,i)+S(j,j),n=S(j,i)-S(i,j);
+				Givens(m,n,&c,&s);
+
+				G.setZero();						//get G_ij
+				G(i,i)=c;
+				G(j,j)=c;
+				G(i,j)=s;
+				G(j,i)=-s;
+				G(3-i-j,3-i-j)=1;
+				R.applyOnTheRight(G);
+				
+				S.applyOnTheLeft(G.transpose());	//update S
+			}
+		it++;
+	}
+	std::cout << "total iterations: " << it << std::endl;
+	std::cout << "F: \n" << F << std::endl;
+	std::cout << "R: \n" << R << std::endl;
+	std::cout << "S: \n" << S << std::endl;
+	
+	F-=R*S;
+	T error=FNorm(F);
+	std::cout << "Polar error: \n" << error << std::endl;
+}
+
 
 int main()
 {
-  Algorithm_2_Test();
-  SVD2_2();
-  bool run_benchmark = true;
+	//std::clock_t start;
+	//double duration;
+	
+	Eigen::Matrix<int,2,2> F1;
+	Eigen::Matrix<float,2,2> F2;
+	
+	Eigen::Matrix<int,3,3> G1;
+	Eigen::Matrix<float,3,3> G2;
+	
+	F1<<1,2,3,5;				//test template <class T>
+	SVD2_2(F1);
+  	
+	//start=std::clock();		//test running time
+	F2<<1,2,3,5;
+	SVD2_2(F2);
+  	//duration = (std::clock()-start)/(double)CLOCKS_PER_SEC;
+  	//std::cout<<"printf:" <<duration<<'\n';
+	
+	G1<<1,2,3,4,5,6,7,8,9;
+	Polar3_3(G1);
+	
+	//start=std::clock();
+	G2<<1.2,2.3,3.4,4.5,5.6,6.7,7.8,8.9,9.1;
+	Polar3_3(G2);
+  	//duration = (std::clock()-start)/(double)CLOCKS_PER_SEC;
+  	//std::cout<<"printf:" <<duration<<'\n';
+	
+  	//bool run_benchmark = true;
     //if (run_benchmark) runBenchmark();
 }
