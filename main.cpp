@@ -242,7 +242,7 @@ void runBenchmark()
     normalize_matrix = false;
     int number_of_repeated_experiments_for_timing = 2;
 
-    for (int test_number = 1; test_number <= 1; test_number++) {
+    for (int test_number = 1; test_number <= 10; test_number++) {
 
         if (test_number == 1) {
             title = "random timing test";
@@ -432,7 +432,7 @@ void Givens(T x, T y, T* c, T* s){
 	*c=1;
 	*s=0;
 	if(d!=0){
-		t=sqrt(d);
+		t=std::sqrt(d);
 		*c=x/t;
 		*s=-y/t;
 	}
@@ -441,74 +441,83 @@ void Givens(T x, T y, T* c, T* s){
 template <class T>
 void Jacobi(Eigen::Matrix<T,2,2> C, T* c, T* s){
 	T t,tau=(C(3)-C(0))/(2*C(1));
-	if(std::abs(tau)<10e5){
+	
+	if(std::abs(tau)<10e3){
 		if(tau>0)
-			t=tau-sqrt(tau*tau+1);
+			t=tau-std::sqrt(tau*tau+1);
 		if(tau<0)
-			t=tau+sqrt(1+tau*tau);
+			t=tau+std::sqrt(1+tau*tau);
 	}
 	else if(tau>0)
-		t=1/(tau+sqrt(1+tau*tau));
+		t=-1/(tau+std::sqrt(1+tau*tau));
 	else
-		t=1/(-tau+sqrt(1+tau*tau));
+		t=1/(-tau+std::sqrt(1+tau*tau));
 
-	*c=1/sqrt(1+t*t);
+	*c=1/std::sqrt(1+t*t);
 	*s=*c*t;
 }
 
 
-template <class T>
-void SVD2_2(Eigen::Matrix<T,2,2> FF){
-	Eigen::Matrix<T,2,2> C,V,Flip,Sign,U,Sigma,F;
-	Sign<<1,0,0,-1;
-	Flip<<0,1,1,0;
-	F=FF;
+//template <class T>
+void SVD2_2(const Eigen::Matrix2f& F, Eigen::Matrix2f& U, Eigen::Matrix2f& sigma, Eigen::Matrix2f& V){
 	
-	C=F.transpose()*F;
+	std::cout << "\n\n<<<<<<<<<<<<<<<<<<<<<<<< 2*2 SVD >>>>>>>>>>>>>>>>>>>>>>>>\n\n" << std::endl;
 	
-	T c,s;
-							//do Jacobi rotation to get C=V*Sigma^2*V^t
+	Eigen::Matrix<float,2,2> C,Flip,Sign,FF;
+	Sign<<1,0,0,-1;								//change sign of second column
+	Flip<<0,1,1,0;								//flip the two columns
+	FF=F;
+	
+	C=FF.transpose()*FF;
+	
+	//do Jacobi rotation to get C=V*Sigma^2*V^t
+	float c,s;
 	Jacobi(C,&c,&s);
-
-	V << c,-s,s,c;
 	
+	std::cout << c << "," << s <<std::endl;
+	
+	
+	V << c,-s,s,c;
+
 	C.applyOnTheLeft(V.adjoint());
 	C.applyOnTheRight(V);
+	//now C=sigma^2
+	
+	std::cout << C <<std::endl;
 	
 	bool V_flip = false;
 	bool U_flip = false;
 	
-	T sigma1, sigma2;
+	float sigma1, sigma2;
 	if(C(0)>=C(3)){
-		sigma1=sqrt(C(0));
-		sigma2=sqrt(C(3));
+		sigma1=std::sqrt(std::abs(C(0)));		//abs used to prevent case: C(0) near zero negative by computation error
+		sigma2=std::sqrt(std::abs(C(3)));
 	}
 	else{
 		V_flip = true;
 		
 		V.applyOnTheRight(Flip);
 		
-		sigma1=sqrt(C(3));
-		sigma2=sqrt(C(0));
+		sigma1=std::sqrt(std::abs(C(3)));
+		sigma2=std::sqrt(std::abs(C(0)));
 	}
-	
-	C=F*V;								//A=FV
+
+	C=F*V;										//A=FV
 
 	Givens(C(0),C(1),&c,&s);
 	U<< c,s,-s,c;
-	
-	T r = C(2)*s+C(3)*c;   				//r_22
-	
+
+	float r = C(2)*s+C(3)*c;   					//r_22
+
 	if(r<0){
 		U_flip=true;
 		U.applyOnTheRight(Sign);
-		sigma2=-sigma2;
 	}
 	
-	Sigma << sigma1, 0, 0, sigma2;
-	F=U*Sigma*V.transpose();
-	
-	T detF=F(0)*F(3)-F(1)*F(2);
+	sigma << sigma1, 0, 0, sigma2;
+	FF=U*sigma*V.transpose();					//computed F before sign corrections
+
+	float detF=FF(0)*FF(3)-FF(1)*FF(2);
 	
 	if(detF<0){
 		sigma2=-sigma2;
@@ -529,34 +538,35 @@ void SVD2_2(Eigen::Matrix<T,2,2> FF){
 			U.applyOnTheRight(Sign);
 			V.applyOnTheRight(Sign);
 		}
-		else if(U_flip){
-			U.applyOnTheRight(Sign);
+		else if(U_flip){						//when sigma2=0 need to flip sign of sigma1 here
+			U.applyOnTheRight(-Sign);
 			sigma1=-sigma1;
 		}
 		else if(V_flip){
-			V.applyOnTheRight(Sign);
+			V.applyOnTheRight(-Sign);
 			sigma1=-sigma1;
 		}
 	}
 	
 	std::cout << "computed sigma:\n" << sigma1 << "," << sigma2 << std::endl;
 	std::cout << "F:\n" << F << std::endl; 
+	std::cout << "Computed F:\n" << FF << std::endl; 
 	std::cout << "U:\n" << U << std::endl; 
 	std::cout << "V:\n" << V << std::endl; 
 	std::cout << "check determinant:" << std::endl;
 	std::cout << "detU=" << U(0)*U(3)-U(1)*U(2) << std::endl;
 	std::cout << "detV=" << V(0)*V(3)-V(1)*V(2) << std::endl;
 	
-	Sigma << sigma1, 0, 0, sigma2;
-	F=FF-U*Sigma*V.transpose();
+	sigma << sigma1, 0, 0, sigma2;				//final Sigma
+	FF=F-U*sigma*V.transpose();					//SVD error matrix
 
-	T error=sqrt(F(0)*F(0)+F(1)*F(1)+F(2)*F(2)+F(3)*F(3));    //error in Frobinus norm
+	float error=std::sqrt(FF(0)*FF(0)+FF(1)*FF(1)+FF(2)*FF(2)+FF(3)*FF(3));    //error in Frobenius norm
 		
 	std::cout << "SVD error:\n" << error << std::endl;
 }
 
 template <class T>
-T findMax(T a, T b, T c){					//find max of three inputs
+T findMax(T a, T b, T c){						//find max of three inputs
 	T max = a;
 	if(max<b)
 		max=b;
@@ -567,85 +577,128 @@ T findMax(T a, T b, T c){					//find max of three inputs
 }
 
 template <class T>
-T FNorm(Eigen::Matrix<T,3,3> F){			//Frobinus norm of 3*3 matrix
+T FNorm(Eigen::Matrix<T,3,3> F){				//Frobenius norm of 3*3 matrix; I wanted this to work for any sized 												//matrix but can't make it work
 	int n=F.cols();
 	T norm=0;
 	for(int i=0;i<n;i++)
 		for(int j=0;j<n;j++)
 			norm+=F(i,j)*F(i,j);
-	norm=sqrt(norm);
+	norm=std::sqrt(norm);
 	
 	return norm;
 }
 
 template <class T>
-void Polar3_3(Eigen::Matrix<T,3,3> F){
-	Eigen::Matrix<T,3,3> R,S,G;
-	G.setZero();						
+T InftyNorm(Eigen::Matrix<T,3,3> F){			//Infinity norm of 3*3 matrix; same problem as above
+	int n=F.cols();
+	T norm=0, temp=0;
+	for(int j=0;j<n;j++)
+		norm+=std::abs(F(0,j));
+	for(int i=1;i<n;i++){
+		for(int j=0;j<n;j++)
+			temp+=std::abs(F(i,j));
+		if(norm<temp)
+			norm=temp;
+		temp=0;
+	}
+	
+	return norm;
+}
+
+//template <class T>
+void Polar3_3(const Eigen::Matrix3f& F, Eigen::Matrix3f& R, Eigen::Matrix3f& S){
+	
+	std::cout << "\n\n<<<<<<<<<<<<<<<< 3*3 Polar Decomposition >>>>>>>>>>>>>>>>\n\n" << std::endl;
+	
+	Eigen::Matrix<float,3,3> FF,G;
+	G.setZero();		
+	FF=F;				
 	S=F;
 	R<<1,0,0,0,1,0,0,0,1;
 	
-	int it = 0, max_it = 100;
-	T c,s,m,n;
-	float tol = 0.001;
+	int it = 0, max_it = 500;
+	float c,s,m,n;
+	float tol = 0.0001;
 	
 	while(it<max_it && findMax(std::abs(S(0,1)-S(1,0)),std::abs(S(0,2)-S(2,0)),std::abs(S(1,2)-S(2,1)))>tol){
 		for(int i=0;i<2;i++)
 			for(int j=i+1;j<3;j++){
-				m=S(i,i)+S(j,j),n=S(j,i)-S(i,j);
+				m=S(i,i)+S(j,j);
+				n=S(j,i)-S(i,j);
 				Givens(m,n,&c,&s);
 
-				G.setZero();						//get G_ij
+				G.setZero();						//set G_ij
 				G(i,i)=c;
 				G(j,j)=c;
 				G(i,j)=s;
 				G(j,i)=-s;
 				G(3-i-j,3-i-j)=1;
-				R.applyOnTheRight(G);
+				
+				R.applyOnTheRight(G);				//update R
 				
 				S.applyOnTheLeft(G.transpose());	//update S
 			}
 		it++;
 	}
+	
+	FF=R*S;											//computed F
+	
 	std::cout << "total iterations: " << it << std::endl;
 	std::cout << "F: \n" << F << std::endl;
+	std::cout << "Computed F: \n" << FF << std::endl;
 	std::cout << "R: \n" << R << std::endl;
 	std::cout << "S: \n" << S << std::endl;
 	
-	F-=R*S;
-	T error=FNorm(F);
+	FF=F-FF;	
+	float error=FNorm(FF);
 	std::cout << "Polar error: \n" << error << std::endl;
+	
+	float reError=error/FNorm(F);					//if F has some very large elements, the reconstruction 
+													//error can be pretty big; so I also compute the relative error
+	std::cout << "relative error: \n" << reError << std::endl;
 }
 
 
 int main()
 {
+	
 	//std::clock_t start;
 	//double duration;
 	
-	Eigen::Matrix<int,2,2> F1;
 	Eigen::Matrix<float,2,2> F2;
+	Eigen::Matrix2f U,V,sigma;
 	
-	Eigen::Matrix<int,3,3> G1;
 	Eigen::Matrix<float,3,3> G2;
+	Eigen::Matrix3f R,S;
 	
-	F1<<1,2,3,5;				//test template <class T>
-	SVD2_2(F1);
+	//Eigen::Matrix<int,2,2> F1;					//used to test template <class T>; no longer works
+	//F1<<1,2,3,5;									
+	//SVD2_2(F1);
   	
-	//start=std::clock();		//test running time
-	F2<<1,2,3,5;
-	SVD2_2(F2);
-  	//duration = (std::clock()-start)/(double)CLOCKS_PER_SEC;
-  	//std::cout<<"printf:" <<duration<<'\n';
+	//start=std::clock();							//test running time
+	F2<<-0.000001,-8,125000,-5;
+	SVD2_2(F2,U,sigma,V);
 	
-	G1<<1,2,3,4,5,6,7,8,9;
-	Polar3_3(G1);
+	std::cout << "U:\n" << U << std::endl; 
+	std::cout << "Sigma:\n" << sigma << std::endl; 
+	std::cout << "V:\n" << V << std::endl; 
+	
+  	//duration = (std::clock()-start)/(double)CLOCKS_PER_SEC;
+  	//std::cout<<"time used:" <<duration<<'\n';
+	
+	//Eigen::Matrix<int,3,3> G1;					//used to test template <class T>; no longer works
+	//G1<<1,2,3,4,5,6,7,8,9;
+	//Polar3_3(G1);
 	
 	//start=std::clock();
-	G2<<1.2,2.3,3.4,4.5,5.6,6.7,7.8,8.9,9.1;
-	Polar3_3(G2);
-  	//duration = (std::clock()-start)/(double)CLOCKS_PER_SEC;
-  	//std::cout<<"printf:" <<duration<<'\n';
+	G2<<0.1,0.0004,2.3,1232135074,-0.25,-5.6,0,-7.8,100000;
+	Polar3_3(G2,R,S);
+	
+	std::cout << "R: \n" << R << std::endl;
+	std::cout << "S: \n" << S << std::endl;
+  	
+	//duration = (std::clock()-start)/(double)CLOCKS_PER_SEC;
+  	//std::cout<<"time used:" <<duration<<'\n';
 	
   	//bool run_benchmark = true;
     //if (run_benchmark) runBenchmark();
